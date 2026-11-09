@@ -1,0 +1,64 @@
+name: Build ImmortalWrt (UFI001C, 20MHz-only WiFi)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 720
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+
+      - name: Update & install feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Select target (OpenStick UFI001C / msm8916)
+        run: |
+          cat > .config <<'EOF'
+          CONFIG_TARGET_msm89xx=y
+          CONFIG_TARGET_msm89xx_msm8916=y
+          CONFIG_TARGET_msm89xx_msm8916_DEVICE_openstick-ufi001c=y
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-ssl=y
+          CONFIG_PACKAGE_luci-app-firewall=y
+          CONFIG_PACKAGE_luci-app-opkg=y
+          CONFIG_PACKAGE_luci-base=y
+          CONFIG_PACKAGE_luci-mod-admin-full=y
+          CONFIG_PACKAGE_luci-proto-ppp=y
+          CONFIG_PACKAGE_luci-theme-bootstrap=y
+          CONFIG_PACKAGE_default-settings=y
+          CONFIG_PACKAGE_opkg=y
+          CONFIG_PACKAGE_htop=y
+          CONFIG_PACKAGE_bash=y
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_wget-ssl=y
+          CONFIG_PACKAGE_block-mount=y
+          CONFIG_PACKAGE_kmod-usb-storage=y
+          CONFIG_PACKAGE_kmod-fs-ext4=y
+          EOF
+          make defconfig
+
+      - name: Download
+        run: make download -j8
+
+      - name: Build
+        run: make -j$(nproc) || make -j1 V=s
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-ufi001c
+          path: bin/targets/msm89xx/msm8916/
