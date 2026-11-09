@@ -51,8 +51,13 @@ jobs:
             > .config
           make defconfig
 
-      - name: Download
-        run: make download -j8
+      - name: Download sources (retry on transient failures)
+        run: |
+          for i in 1 2 3 4 5 6; do
+            make download -j8 && echo "download OK on attempt $i" && break
+            echo "download attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
 
       - name: Build
         run: make -j$(nproc) || make -j1 V=s
