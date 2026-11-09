@@ -16,6 +16,18 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Cache downloaded sources & toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            dl
+            staging_dir
+            build_dir/host
+            build_dir/toolchain-*
+          key: ${{ runner.os }}-openwrt-msm8916-${{ hashFiles('.config') }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-msm8916-
+
       - name: Install build dependencies
         run: |
           sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
