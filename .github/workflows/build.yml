@@ -31,6 +31,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+          sudo apt install -y mkbootimg android-sdk-libsparse-utils
 
       - name: Update & install feeds
         run: |
