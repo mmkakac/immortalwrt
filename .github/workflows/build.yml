@@ -64,6 +64,11 @@ jobs:
             > .config
           make defconfig
 
+      - name: Show .config (device & package selection)
+        run: |
+          echo "=== Selected target/device packages ==="
+          grep -E 'CONFIG_TARGET|CONFIG_PACKAGE_(kmod|qcom|openstick|gc|android|rootfs|qrtr|rmtfs|wpad|procd|ubus|uci|uhttpd|firewall|dnsmasq|netifd)' .config | sort
+
       - name: Download sources (retry on transient failures)
         run: |
           for i in 1 2 3 4 5 6; do
@@ -75,16 +80,25 @@ jobs:
       - name: Build
         run: make -j$(nproc) || make -j1 V=s
 
+      - name: Show installed package manifest
+        run: |
+          echo "=== Installed packages in rootfs ==="
+          cat bin/targets/msm89xx/msm8916/*.manifest 2>/dev/null || echo "No manifest found"
+          echo "=== Image files ==="
+          ls -lh bin/targets/msm89xx/msm8916/*.img 2>/dev/null
+
       - name: Convert sparse system.img to raw
         run: |
           cd bin/targets/msm89xx/msm8916/
-          SYSIMG=$(ls *-squashfs-system.img)
+          SYSIMG=$(ls *-squashfs-system.img 2>/dev/null || ls *-system.img)
           echo "Converting $SYSIMG to raw..."
           simg2img "$SYSIMG" "${SYSIMG%.img}-raw.img"
           ls -lh *.img
 
-      - name: Upload firmware
+      - name: Upload firmware + debug info
         uses: actions/upload-artifact@v4
         with:
           name: immortalwrt-ufi001c
-          path: bin/targets/msm89xx/msm8916/
+          path: |
+            bin/targets/msm89xx/msm8916/
+            .config
