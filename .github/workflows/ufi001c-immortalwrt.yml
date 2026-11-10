@@ -36,7 +36,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     steps:
     - name: Checkout
@@ -56,11 +56,11 @@ jobs:
       id: src
       run: |
         if [ -f include/toplevel.mk ]; then
-          echo "检测到本仓库就是 ImmortalWrt 源码 → 直接编译自己的 fork"
+          echo "检测到本仓库就是 ImmortalWrt 源码"
           echo "url=${{ github.server_url }}/${{ github.repository }}" >> "$GITHUB_OUTPUT"
           echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
         else
-          echo "本仓库是配置套件 → clone lkiuyu/immortalwrt"
+          echo "clone lkiuyu/immortalwrt"
           echo "url=https://github.com/lkiuyu/immortalwrt" >> "$GITHUB_OUTPUT"
           echo "ref=master" >> "$GITHUB_OUTPUT"
         fi
@@ -80,7 +80,6 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo rm -rf /etc/apt/sources.list.d/*
         sudo apt-get -qq update
         DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache
         clang cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib
