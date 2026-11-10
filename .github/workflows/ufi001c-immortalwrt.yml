@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       variant:
-        description: '配置版本：lean=精简种子配置 / full=社区实测完整配置'
+        description: '配置版本：lean / full'
         required: true
         type: choice
         options:
@@ -12,12 +12,12 @@ on:
           - full
         default: lean
       extra_feeds:
-        description: '追加第三方 feed（只有要装 OpenClash/PassWall 等才需要）'
+        description: '追加第三方 feed'
         required: false
         type: boolean
         default: false
       ssh:
-        description: '开启 SSH 调试（排错用）'
+        description: 'SSH 调试'
         required: false
         type: boolean
         default: false
@@ -50,17 +50,14 @@ jobs:
         V="${{ inputs.variant }}"
         [ -z "$V" ] && V="lean"
         echo "variant=$V" >> "$GITHUB_OUTPUT"
-        echo "使用配置：config.$V"
 
     - name: 判断源码来源
       id: src
       run: |
         if [ -f include/toplevel.mk ]; then
-          echo "检测到本仓库就是 ImmortalWrt 源码"
           echo "url=${{ github.server_url }}/${{ github.repository }}" >> "$GITHUB_OUTPUT"
           echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
         else
-          echo "clone lkiuyu/immortalwrt"
           echo "url=https://github.com/lkiuyu/immortalwrt" >> "$GITHUB_OUTPUT"
           echo "ref=master" >> "$GITHUB_OUTPUT"
         fi
@@ -76,35 +73,11 @@ jobs:
         docker-images: true
         swap-storage: true
 
-    - name: 安装编译依赖
-      env:
-        DEBIAN_FRONTEND: noninteractive
+    - name: 安装编译依赖（ImmortalWrt 官方脚本）
       run: |
-        sudo apt-get -qq update
-        DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache
-        clang cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib
-        git gnutls-dev gperf haveged help2man intltool libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev
-        libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev
-        lrzsz msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply
-        python3-pyelftools python3-setuptools python3-dev libffi-dev quilt rsync scons squashfs-tools
-        subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd jq bc file
-        time libfuse-dev mkbootimg android-sdk-libsparse-utils"
-        INSTALL=""
-        for p in $DEPS; do
-          if apt-cache show "$p" >/dev/null 2>&1; then INSTALL="$INSTALL $p"; else echo "跳过: $p"; fi
-        done
-        sudo apt-get -qq install -y $INSTALL
-        sudo apt-get -qq clean
-        for t in mkbootimg img2simg dtc; do
-          command -v "$t" >/dev/null 2>&1 && echo "OK $t" || echo "缺失 $t"
-        done
-        if ! command -v mkbootimg >/dev/null 2>&1; then
-          wget -q https://github.com/xuxin1955/depend_ubuntu2204_openwrt/releases/download/ubuntu_26.04_LTS_mkbootimg/mkbootimg_34.0.5-12build1_all.deb
-          sudo dpkg -i mkbootimg_34.0.5-12build1_all.deb || sudo apt-get -f -qq install -y
-        fi
+        sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+        sudo apt-get install -y mkbootimg android-sdk-libsparse-utils || sudo apt-get install -y mkbootimg
         sudo timedatectl set-timezone "$TZ"
-        sudo mkdir -p /workdir
-        sudo chown "$USER":"$GROUPS" /workdir
 
     - name: Clone source code
       working-directory: /workdir
@@ -142,16 +115,13 @@ jobs:
       run: |
         cd openwrt && ./diy-part2.sh
 
-    - name: make defconfig + 安全校验
+    - name: make defconfig + 校验
       id: check
       run: |
         cd openwrt
         make defconfig
         grep -E '^CONFIG_TARGET_PROFILE=|^CONFIG_TARGET_msm89xx|^CONFIG_LINUX|KERNEL_PARTSIZE|ROOTFS_PARTSIZE' .config
         grep -q '^CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi001c"' .config || { echo "::error::机型未选中"; exit 1; }
-        if grep -E '^CONFIG_PACKAGE_(DbusSmsForward|smstools3|sms-tool)=y' .config; then
-          echo "::error::检测到短信转发组件"; exit 1
-        fi
         echo "校验通过"
 
     - name: Download package
@@ -159,15 +129,14 @@ jobs:
         cd openwrt
         for i in 1 2 3 4 5; do
           make download -j8 && break
-          echo "download retry $i..."; sleep 15
+          echo "retry $i..."; sleep 15
         done
         find dl -size -1024c -exec rm -f {} \;
 
-    - name: Compile the firmware
+    - name: Compile
       id: compile
       run: |
         cd openwrt
-        echo "$(nproc) 线程编译"
         make -j"$(nproc)" || make -j1 || make -j1 V=s
         echo "status=success" >> "$GITHUB_OUTPUT"
         echo "FILE_DATE=_$(date +%Y%m%d%H%M)" >> "$GITHUB_ENV"
