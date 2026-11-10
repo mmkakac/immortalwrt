@@ -1,0 +1,201 @@
+name: Build ImmortalWrt · UFI001C
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: '配置版本：lean=精简种子配置 / full=社区实测完整配置'
+        required: true
+        type: choice
+        options:
+          - lean
+          - full
+        default: lean
+      extra_feeds:
+        description: '追加第三方 feed（只有要装 OpenClash/PassWall 等才需要）'
+        required: false
+        type: boolean
+        default: false
+      ssh:
+        description: '开启 SSH 调试（排错用）'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  KIT_DIR: ufi001c
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: 选择配置版本
+      id: variant
+      run: |
+        V="${{ inputs.variant }}"
+        [ -z "$V" ] && V="lean"
+        echo "variant=$V" >> "$GITHUB_OUTPUT"
+        echo "使用配置：config.$V"
+
+    - name: 判断源码来源
+      id: src
+      run: |
+        if [ -f include/toplevel.mk ]; then
+          echo "检测到本仓库就是 ImmortalWrt 源码 → 直接编译自己的 fork"
+          echo "url=${{ github.server_url }}/${{ github.repository }}" >> "$GITHUB_OUTPUT"
+          echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "本仓库是配置套件 → clone lkiuyu/immortalwrt"
+          echo "url=https://github.com/lkiuyu/immortalwrt" >> "$GITHUB_OUTPUT"
+          echo "ref=master" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: 释放磁盘空间
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+
+    - name: 安装编译依赖
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/*
+        sudo apt-get -qq update
+        DEPS="ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache
+        clang cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib
+        git gnutls-dev gperf haveged help2man intltool libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev
+        libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev
+        lrzsz msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply
+        python3-pyelftools python3-setuptools python3-dev libffi-dev quilt rsync scons squashfs-tools
+        subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd jq bc file
+        time libfuse-dev mkbootimg android-sdk-libsparse-utils"
+        INSTALL=""
+        for p in $DEPS; do
+          if apt-cache show "$p" >/dev/null 2>&1; then INSTALL="$INSTALL $p"; else echo "跳过: $p"; fi
+        done
+        sudo apt-get -qq install -y $INSTALL
+        sudo apt-get -qq clean
+        for t in mkbootimg img2simg dtc; do
+          command -v "$t" >/dev/null 2>&1 && echo "OK $t" || echo "缺失 $t"
+        done
+        if ! command -v mkbootimg >/dev/null 2>&1; then
+          wget -q https://github.com/xuxin1955/depend_ubuntu2204_openwrt/releases/download/ubuntu_26.04_LTS_mkbootimg/mkbootimg_34.0.5-12build1_all.deb
+          sudo dpkg -i mkbootimg_34.0.5-12build1_all.deb || sudo apt-get -f -qq install -y
+        fi
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown "$USER":"$GROUPS" /workdir
+
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        git clone "${{ steps.src.outputs.url }}" -b "${{ steps.src.outputs.ref }}" --depth 1 --single-branch openwrt
+        ln -sf /workdir/openwrt "$GITHUB_WORKSPACE"/openwrt
+
+    - name: 放入机型配置与补丁
+      run: |
+        cp "$KIT_DIR/config.${{ steps.variant.outputs.variant }}" openwrt/.config
+        cp "$KIT_DIR/diy-part1.sh" "$KIT_DIR/diy-part2.sh" openwrt/
+        chmod +x openwrt/diy-part1.sh openwrt/diy-part2.sh
+        [ -d "$KIT_DIR/patches" ] && cp -r "$KIT_DIR/patches" openwrt/patches-ht20 || true
+        [ -d "$KIT_DIR/files" ] && cp -r "$KIT_DIR/files" openwrt/files || true
+
+    - name: Load custom feeds
+      env:
+        EXTRA_FEEDS: ${{ inputs.extra_feeds && '1' || '0' }}
+      run: |
+        chmod +x openwrt/diy-part1.sh
+        cd openwrt && ./diy-part1.sh
+
+    - name: Update feeds
+      run: cd openwrt && ./scripts/feeds update -a
+
+    - name: Install feeds
+      run: |
+        cd openwrt
+        if [ -d feeds/smpackage ]; then
+          rm -rf feeds/smpackage/{base-files,dnsmasq,firewall*,fullconenat,libnftnl,nftables,ppp,opkg,ucl,upx,vsftpd*,miniupnpd-iptables,wireless-regdb}
+        fi
+        ./scripts/feeds install -a
+
+    - name: Load custom configuration
+      run: |
+        cd openwrt && ./diy-part2.sh
+
+    - name: make defconfig + 安全校验
+      id: check
+      run: |
+        cd openwrt
+        make defconfig
+        grep -E '^CONFIG_TARGET_PROFILE=|^CONFIG_TARGET_msm89xx|^CONFIG_LINUX|KERNEL_PARTSIZE|ROOTFS_PARTSIZE' .config
+        grep -q '^CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi001c"' .config || { echo "::error::机型未选中"; exit 1; }
+        if grep -E '^CONFIG_PACKAGE_(DbusSmsForward|smstools3|sms-tool)=y' .config; then
+          echo "::error::检测到短信转发组件"; exit 1
+        fi
+        echo "校验通过"
+
+    - name: Download package
+      run: |
+        cd openwrt
+        for i in 1 2 3 4 5; do
+          make download -j8 && break
+          echo "download retry $i..."; sleep 15
+        done
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile the firmware
+      id: compile
+      run: |
+        cd openwrt
+        echo "$(nproc) 线程编译"
+        make -j"$(nproc)" || make -j1 || make -j1 V=s
+        echo "status=success" >> "$GITHUB_OUTPUT"
+        echo "FILE_DATE=_$(date +%Y%m%d%H%M)" >> "$GITHUB_ENV"
+
+    - name: 验证 40MHz 补丁
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        cd openwrt
+        f=$(find build_dir/target-*/linux-msm89xx*/linux-*/drivers/net/wireless/ath/wcn36xx/main.c 2>/dev/null | head -1)
+        [ -z "$f" ] && { echo "::error::找不到 main.c"; exit 1; }
+        grep -q 'NO_HT40MINUS' "$f" && echo "补丁OK" || { echo "::error::补丁未生效"; exit 1; }
+
+    - name: 整理固件
+      id: organize
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        cp "$GITHUB_WORKSPACE"/openwrt/.config config.used
+        ls -lh
+        echo "FIRMWARE=$PWD" >> "$GITHUB_ENV"
+        echo "status=success" >> "$GITHUB_OUTPUT"
+
+    - name: Upload firmware
+      uses: actions/upload-artifact@v4
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: ImmortalWrt_ufi001c_${{ steps.variant.outputs.variant }}${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE }}
+        retention-days: 30
