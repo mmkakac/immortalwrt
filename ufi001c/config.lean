@@ -83,12 +83,9 @@ CONFIG_PACKAGE_luci-app-cpu-status=y
 CONFIG_PACKAGE_luci-app-temp-status=y
 CONFIG_PACKAGE_zoneinfo-asia=y
 
-# ---- 依赖补全（glib2/modemmanager 等需要）----
+# ---- glib2 依赖（libffi 由套件补回源码树 package/libs/libffi）----
 CONFIG_PACKAGE_libffi=y
 CONFIG_PACKAGE_libpcre2=y
-CONFIG_PACKAGE_libmount=y
-CONFIG_PACKAGE_libblkid=y
-CONFIG_PACKAGE_libuuid=y
 
 # ---- 关闭短信转发 ----
 # CONFIG_PACKAGE_smstools3 is not set

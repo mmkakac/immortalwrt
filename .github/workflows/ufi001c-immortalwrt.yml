@@ -122,6 +122,9 @@ jobs:
         cp "$KIT_DIR/config.${{ steps.variant.outputs.variant }}" openwrt/.config
         cp "$KIT_DIR/diy-part1.sh" "$KIT_DIR/diy-part2.sh" openwrt/
         chmod +x openwrt/diy-part1.sh openwrt/diy-part2.sh
+        # 补回 fork 缺失的 base libffi 包（glib2/modemmanager 依赖）
+        mkdir -p openwrt/package/libs/libffi
+        cp "$KIT_DIR/packages/libffi/Makefile" openwrt/package/libs/libffi/Makefile
         [ -d "$KIT_DIR/patches" ] && cp -r "$KIT_DIR/patches" openwrt/patches-ht20 || true
         [ -d "$KIT_DIR/files" ] && cp -r "$KIT_DIR/files" openwrt/files || true
 
@@ -143,7 +146,7 @@ jobs:
       run: |
         cd openwrt
         make defconfig
-        for pkg in libffi libpcre2 libmount libblkid libuuid; do
+        for pkg in libffi libpcre2; do
           grep -q "^CONFIG_PACKAGE_${pkg}=y" .config || echo "CONFIG_PACKAGE_${pkg}=y" >> .config
         done
         make defconfig
