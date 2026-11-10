@@ -1,0 +1,16 @@
+#!/bin/sh
+# 99-ht20-default —— 首次开机把 radio 的 htmode 钉成 HT20
+
+[ -f /etc/config/wireless ] || exit 1
+grep -q '^config wifi-device' /etc/config/wireless || exit 1
+
+fixed=0
+for sec in $(uci -q show wireless | sed -n 's/^wireless\.\([^.=]*\)=wifi-device$/\1/p'); do
+	[ "$(uci -q get wireless.$sec.htmode)" = "HT20" ] && continue
+	echo "ht20-default: wireless.$sec.htmode -> HT20"
+	uci set wireless.$sec.htmode='HT20'
+	fixed=1
+done
+
+[ "$fixed" = 1 ] && uci commit wireless
+exit 0

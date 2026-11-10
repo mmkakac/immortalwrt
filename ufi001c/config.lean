@@ -1,0 +1,94 @@
+# =============================================================================
+# 高通410（MSM8916）UFI001C · 精简版编译配置（seed）
+# 源码：lkiuyu/immortalwrt master（target/linux/msm89xx/msm8916）
+# =============================================================================
+
+# ---- 机型：THWC UFI001C ----
+CONFIG_TARGET_msm89xx=y
+CONFIG_TARGET_msm89xx_msm8916=y
+CONFIG_TARGET_msm89xx_msm8916_DEVICE_openstick-ufi001c=y
+CONFIG_TARGET_BOARD="msm89xx"
+CONFIG_TARGET_SUBTARGET="msm8916"
+CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi001c"
+
+# ---- 内核 / 镜像布局 ----
+CONFIG_LINUX_6_1=y
+CONFIG_TARGET_ROOTFS_EXT4FS=y
+CONFIG_TARGET_EXT4_RESERVED_PCT=0
+CONFIG_TARGET_EXT4_BLOCKSIZE_4K=y
+CONFIG_TARGET_EXT4_BLOCKSIZE=4096
+CONFIG_TARGET_EXT4_JOURNAL=y
+CONFIG_TARGET_KERNEL_PARTSIZE=32
+CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+
+# ---- 系统基础 ----
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+CONFIG_PACKAGE_default-settings-chn=y
+CONFIG_PACKAGE_luci-theme-bootstrap=y
+CONFIG_PACKAGE_luci-theme-argon=y
+CONFIG_PACKAGE_luci-app-firewall=y
+CONFIG_PACKAGE_luci-app-opkg=y
+CONFIG_PACKAGE_luci-app-uhttpd=y
+CONFIG_PACKAGE_ca-bundle=y
+CONFIG_PACKAGE_ca-certificates=y
+CONFIG_PACKAGE_dnsmasq-full=y
+CONFIG_PACKAGE_firewall4=y
+CONFIG_PACKAGE_ip-full=y
+CONFIG_PACKAGE_cgi-io=y
+CONFIG_PACKAGE_zram-swap=y
+CONFIG_PACKAGE_opkg=y
+
+# ---- 4G 基带 / 410 棒子必需 ----
+CONFIG_PACKAGE_openstick-tweaks=y
+CONFIG_PACKAGE_modemmanager=y
+CONFIG_PACKAGE_luci-proto-modemmanager=y
+CONFIG_PACKAGE_qmi-utils=y
+CONFIG_PACKAGE_libqmi=y
+CONFIG_PACKAGE_libmbim=y
+CONFIG_PACKAGE_libqrtr=y
+CONFIG_PACKAGE_qrtr-ns=y
+CONFIG_PACKAGE_rmtfs=y
+CONFIG_PACKAGE_gc=y
+CONFIG_PACKAGE_rootfs-resizer=y
+CONFIG_PACKAGE_android-tools-adbd=y
+CONFIG_PACKAGE_adb=y
+CONFIG_PACKAGE_iwinfo=y
+CONFIG_PACKAGE_wireless-regdb=y
+CONFIG_PACKAGE_wpad-basic-wolfssl=y
+CONFIG_PACKAGE_comgt=y
+CONFIG_PACKAGE_chat=y
+CONFIG_PACKAGE_ppp=y
+
+# ---- 常用小工具 ----
+CONFIG_PACKAGE_curl=y
+CONFIG_PACKAGE_wget-ssl=y
+CONFIG_PACKAGE_openssh-sftp-server=y
+CONFIG_PACKAGE_bash=y
+CONFIG_PACKAGE_nano-full=y
+CONFIG_PACKAGE_tar=y
+CONFIG_PACKAGE_unzip=y
+CONFIG_PACKAGE_bzip2=y
+CONFIG_PACKAGE_xz-utils=y
+CONFIG_PACKAGE_jq=y
+CONFIG_PACKAGE_file=y
+CONFIG_PACKAGE_smartmontools=y
+CONFIG_PACKAGE_tcping=y
+CONFIG_PACKAGE_ttyd=y
+CONFIG_PACKAGE_luci-app-ttyd=y
+CONFIG_PACKAGE_watchcat=y
+CONFIG_PACKAGE_luci-app-watchcat=y
+CONFIG_PACKAGE_miniupnpd-nftables=y
+CONFIG_PACKAGE_luci-app-upnp=y
+CONFIG_PACKAGE_luci-app-cpu-status=y
+CONFIG_PACKAGE_luci-app-temp-status=y
+CONFIG_PACKAGE_zoneinfo-asia=y
+
+# ---- 明确关闭：短信转发相关 ----
+# CONFIG_PACKAGE_DbusSmsForwardCPlus is not set
+# CONFIG_PACKAGE_DbusSmsForward is not set
+# CONFIG_PACKAGE_smsmanager is not set
+# CONFIG_PACKAGE_smstools3 is not set
+# CONFIG_PACKAGE_sms-tool is not set
+# CONFIG_PACKAGE_luci-app-sms-tool-js is not set
+# CONFIG_PACKAGE_luci-app-smstools3 is not set
