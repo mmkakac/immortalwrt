@@ -108,6 +108,19 @@ jobs:
       run: |
         git clone "${{ steps.src.outputs.url }}" -b "${{ steps.src.outputs.ref }}" --depth 1 --single-branch openwrt
         ln -sf /workdir/openwrt "$GITHUB_WORKSPACE"/openwrt
+        cd openwrt && echo "SRC_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+    - name: 缓存 dl/ + toolchain
+      uses: actions/cache@v4
+      with:
+        path: |
+          /workdir/openwrt/dl
+          /workdir/openwrt/staging_dir
+          /workdir/openwrt/build_dir/host
+          /workdir/openwrt/build_dir/toolchain-*
+        key: openwrt-msm8916-${{ env.SRC_SHA }}-${{ steps.variant.outputs.variant }}
+        restore-keys: |
+          openwrt-msm8916-
 
     - name: 放入机型配置与补丁
       run: |
