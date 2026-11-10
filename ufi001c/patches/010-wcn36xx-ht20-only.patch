@@ -1,0 +1,25 @@
+From: ufi001c <local>
+Subject: [PATCH] wifi: wcn36xx: disable 40 MHz on 2GHz band
+
+--- a/drivers/net/wireless/ath/wcn36xx/main.c
++++ b/drivers/net/wireless/ath/wcn36xx/main.c
+@@ -38,6 +38,7 @@
+ 	.band = NL80211_BAND_2GHZ, \
+ 	.center_freq = (_freq), \
+ 	.hw_value = (_idx), \
++	.flags = IEEE80211_CHAN_NO_HT40MINUS | IEEE80211_CHAN_NO_HT40PLUS, \
+ 	.max_power = 25, \
+ }
+ 
+@@ -137,10 +138,7 @@
+ 	.ht_cap		= {
+ 		.cap =	IEEE80211_HT_CAP_GRN_FLD |
+ 			IEEE80211_HT_CAP_SGI_20 |
+-			IEEE80211_HT_CAP_DSSSCCK40 |
+-			IEEE80211_HT_CAP_LSIG_TXOP_PROT |
+-			IEEE80211_HT_CAP_SGI_40 |
+-			IEEE80211_HT_CAP_SUP_WIDTH_20_40,
++			IEEE80211_HT_CAP_LSIG_TXOP_PROT,
+ 		.ht_supported = true,
+ 		.ampdu_factor = IEEE80211_HT_MAX_AMPDU_64K,
+ 		.ampdu_density = IEEE80211_HT_MPDU_DENSITY_16,
