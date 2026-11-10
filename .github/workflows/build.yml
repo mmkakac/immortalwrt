@@ -75,6 +75,14 @@ jobs:
       - name: Build
         run: make -j$(nproc) || make -j1 V=s
 
+      - name: Convert sparse system.img to raw
+        run: |
+          cd bin/targets/msm89xx/msm8916/
+          SYSIMG=$(ls *-squashfs-system.img)
+          echo "Converting $SYSIMG to raw..."
+          simg2img "$SYSIMG" "${SYSIMG%.img}-raw.img"
+          ls -lh *.img
+
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
