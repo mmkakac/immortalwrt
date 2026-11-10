@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       variant:
-        description: 'lean=精简种子配置（内核6.1）/ full=社区完整配置（内核6.12）'
+        description: 'lean / full'
         required: true
         type: choice
         options:
@@ -12,7 +12,7 @@ on:
           - full
         default: lean
       extra_feeds:
-        description: '追加第三方feed（OpenClash/PassWall才需要）'
+        description: '追加第三方feed'
         required: false
         type: boolean
         default: false
@@ -109,16 +109,15 @@ jobs:
         git clone "${{ steps.src.outputs.url }}" -b "${{ steps.src.outputs.ref }}" --depth 1 --single-branch openwrt
         ln -sf /workdir/openwrt "$GITHUB_WORKSPACE"/openwrt
 
-    - name: 缓存下载包 dl/（不缓存编译中间产物，避免配置改了用旧缓存）
+    - name: 缓存下载包
       uses: actions/cache@v4
       with:
         path: /workdir/openwrt/dl
-        key: openwrt-dl-${{ steps.variant.outputs.variant }}-${{ hashFiles(format('{0}/ufi001c/config.{1}', github.workspace, steps.variant.outputs.variant)) }}
+        key: openwrt-dl-${{ steps.variant.outputs.variant }}
         restore-keys: |
-          openwrt-dl-${{ steps.variant.outputs.variant }}-
           openwrt-dl-
 
-    - name: 放入机型配置与补丁
+    - name: 放入配置与补丁
       run: |
         cp "$KIT_DIR/config.${{ steps.variant.outputs.variant }}" openwrt/.config
         cp "$KIT_DIR/diy-part1.sh" "$KIT_DIR/diy-part2.sh" openwrt/
@@ -126,44 +125,36 @@ jobs:
         [ -d "$KIT_DIR/patches" ] && cp -r "$KIT_DIR/patches" openwrt/patches-ht20 || true
         [ -d "$KIT_DIR/files" ] && cp -r "$KIT_DIR/files" openwrt/files || true
 
-    - name: Load custom feeds
+    - name: diy1 + feeds
       env:
         EXTRA_FEEDS: ${{ inputs.extra_feeds && '1' || '0' }}
       run: |
         chmod +x openwrt/diy-part1.sh
         cd openwrt && ./diy-part1.sh
-
-    - name: Update feeds
-      run: cd openwrt && ./scripts/feeds update -a
-
-    - name: Install feeds
-      run: |
-        cd openwrt
+        ./scripts/feeds update -a
         if [ -d feeds/smpackage ]; then
           rm -rf feeds/smpackage/{base-files,dnsmasq,firewall*,fullconenat,libnftnl,nftables,ppp,opkg,ucl,upx,vsftpd*,miniupnpd-iptables,wireless-regdb}
         fi
         ./scripts/feeds install -a
+        ./diy-part2.sh
 
-    - name: Load custom configuration
-      run: |
-        cd openwrt && ./diy-part2.sh
-
-    - name: make defconfig + 校验
+    - name: defconfig + 强制补依赖 + 校验
       id: check
       run: |
         cd openwrt
         make defconfig
-        grep -E '^CONFIG_TARGET_PROFILE=|^CONFIG_TARGET_msm89xx|^CONFIG_LINUX|KERNEL_PARTSIZE|ROOTFS_PARTSIZE' .config
+        for pkg in libffi libpcre2 libmount libblkid libuuid; do
+          grep -q "^CONFIG_PACKAGE_${pkg}=y" .config || echo "CONFIG_PACKAGE_${pkg}=y" >> .config
+        done
+        make defconfig
+        grep -E '^CONFIG_TARGET_PROFILE=|^CONFIG_LINUX' .config
         grep -q '^CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi001c"' .config || { echo "::error::机型未选中"; exit 1; }
-        echo "校验通过"
+        echo "关键依赖:"; grep -E '^CONFIG_PACKAGE_(libffi|glib2|modemmanager|openstick)' .config
 
-    - name: Download package
+    - name: Download
       run: |
         cd openwrt
-        for i in 1 2 3 4 5; do
-          make download -j8 && break
-          echo "retry $i..."; sleep 15
-        done
+        for i in 1 2 3 4 5; do make download -j8 && break; sleep 15; done
         find dl -size -1024c -exec rm -f {} \;
 
     - name: Compile
@@ -174,13 +165,12 @@ jobs:
         echo "status=success" >> "$GITHUB_OUTPUT"
         echo "FILE_DATE=_$(date +%Y%m%d%H%M)" >> "$GITHUB_ENV"
 
-    - name: 验证 40MHz 补丁
+    - name: 验证补丁
       if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         cd openwrt
         f=$(find build_dir/target-*/linux-msm89xx*/linux-*/drivers/net/wireless/ath/wcn36xx/main.c 2>/dev/null | head -1)
-        [ -z "$f" ] && { echo "::error::找不到 main.c"; exit 1; }
-        grep -q 'NO_HT40MINUS' "$f" && echo "补丁OK" || { echo "::error::补丁未生效"; exit 1; }
+        grep -q 'NO_HT40MINUS' "$f" && echo "补丁OK" || exit 1
 
     - name: 整理固件
       id: organize
@@ -193,7 +183,7 @@ jobs:
         echo "FIRMWARE=$PWD" >> "$GITHUB_ENV"
         echo "status=success" >> "$GITHUB_OUTPUT"
 
-    - name: Upload firmware
+    - name: Upload
       uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
