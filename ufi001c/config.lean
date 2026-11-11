@@ -23,6 +23,7 @@ CONFIG_TARGET_ROOTFS_PARTSIZE=1024
 # ---- 系统基础 ----
 CONFIG_PACKAGE_luci=y
 CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+CONFIG_LUCI_LANG_zh_Hans=y
 CONFIG_PACKAGE_default-settings-chn=y
 CONFIG_PACKAGE_luci-theme-bootstrap=y
 CONFIG_PACKAGE_luci-theme-argon=y
@@ -82,6 +83,16 @@ CONFIG_PACKAGE_luci-app-upnp=y
 CONFIG_PACKAGE_luci-app-cpu-status=y
 CONFIG_PACKAGE_luci-app-temp-status=y
 CONFIG_PACKAGE_zoneinfo-asia=y
+
+# ---- 网络服务 / 应用 ----
+# ZeroTier（后台 zerotier + LuCI；简中随 LUCI_LANG_zh_Hans 自动安装）
+CONFIG_PACKAGE_zerotier=y
+CONFIG_PACKAGE_luci-app-zerotier=y
+# Cloudflared 隧道（后台 cloudflared + LuCI；简中随 LUCI_LANG_zh_Hans 自动安装）
+CONFIG_PACKAGE_cloudflared=y
+CONFIG_PACKAGE_luci-app-cloudflared=y
+# 文件助手（第三方 feed: kenzok8/small-package，自带中文）
+CONFIG_PACKAGE_luci-app-fileassistant=y
 
 # ---- glib2 依赖（libffi 由套件补回源码树 package/libs/libffi）----
 CONFIG_PACKAGE_libffi=y
