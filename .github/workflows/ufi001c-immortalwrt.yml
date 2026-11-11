@@ -185,6 +185,16 @@ jobs:
             for d in $(grep -hoE '\+[A-Za-z0-9._-]+(:[A-Za-z0-9._-]+)?' "$mf" | tr -d '+' | sed 's/^[^:]*://' | sort -u); do
               grep -q "^CONFIG_PACKAGE_${d}=y" .config || echo "    依赖未选中: $d"
             done
+            # 生成 Kconfig 里该符号的 depends on 门槛（架构/BROKEN/功能开关）
+            if [ -f tmp/.config-package.in ]; then
+              grep -q "config PACKAGE_${pkg}" tmp/.config-package.in || echo "    符号未注册进 .config-package.in"
+              echo "  Kconfig 门槛:"
+              awk -v sym="PACKAGE_${pkg}" '
+                $0 ~ "^config " sym "$" {f=1}
+                f && /^config / && $0 !~ sym {f=0}
+                f && (/depends on/ || /prompt/) {print "    " $0}
+              ' tmp/.config-package.in
+            fi
           done
           echo "::error::defconfig 未选中以下预期包:$miss"
           exit 1
