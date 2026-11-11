@@ -172,57 +172,42 @@ jobs:
         done
         if [ -n "$miss" ]; then
           echo
-          echo "=== 缺失包依赖排查（Makefile DEPENDS + 未选中依赖）==="
-          echo "tmp 配置文件:"; ls -1 tmp/ 2>/dev/null | grep -iE 'config|package|\.in' | sed 's/^/  /'
-          for pkg in $miss; do
-            mf=$(find feeds package -mindepth 2 -path "*/${pkg}/Makefile" 2>/dev/null | head -1)
-            echo "--- $pkg ---"
-            if [ -z "$mf" ]; then
-              echo "  未在 feeds/ 或 package/ 找到 Makefile（包名不符 / feed 未接入）"
-              continue
-            fi
-            echo "  $mf"
-            grep -E 'DEPENDS' "$mf" | sed 's/^/  /'
-            for d in $(grep -hoE '\+[A-Za-z0-9._-]+(:[A-Za-z0-9._-]+)?' "$mf" | tr -d '+' | sed 's/^[^:]*://' | sort -u); do
-              grep -q "^CONFIG_PACKAGE_${d}=y" .config || echo "    依赖未选中: $d"
-            done
-            # 在生成的 Kconfig 里定位该符号，整段打印（含外层 if / depends on）
-            kf=$(grep -rl "PACKAGE_${pkg}" tmp package feeds 2>/dev/null | grep -E '\.in$' | head -1)
-            if [ -z "$kf" ]; then
-              echo "    未在 tmp/package/feeds 的 .in 中找到该符号（未注册进包索引）"
-            else
-              echo "  Kconfig 文件: $kf"
-              ln=$(grep -n "PACKAGE_${pkg}" "$kf" | head -1 | cut -d: -f1)
-              start=$((ln>12 ? ln-12 : 1)); end=$((ln+12))
-              sed -n "${start},${end}p" "$kf" | sed 's/^/    /'
-            fi
-          done
-          echo
-          echo "=== 底层库现场诊断（CI .config 状态 + 包索引门槛 + .in 注册）==="
+          echo "=== base HEAD / feed 提交 / 全局 ==="
           echo "base HEAD: $(git log -1 --format='%h %ci %s')"
           echo "feed 提交:"; for f in openstick packages luci routing telephony video smpackage store; do [ -d "feeds/$f/.git" ] && echo "  $f: $(git -C feeds/$f log -1 --format='%h %ci')"; done
           echo "全局: ARCH=$(grep -E '^CONFIG_ARCH=' .config) SUBTARGET=$(grep -E '^CONFIG_TARGET_SUBTARGET=' .config) LIBC=$(grep -E '^CONFIG_LIBC=' .config) KERNEL=$(grep -oE '^CONFIG_LINUX_6_[0-9]+' .config | head -1)"
-          DIAG_LIBS="libuv libwebsockets-full libminiupnpc libnatpmp libcurl libnghttp2 wget-ssl libcap libstdcpp libatomic kmod-tun libncurses libreadline terminfo ucode-mod-math libopenssl zlib librt libubox libpcre2"
+          echo
+          echo "=== 重新 defconfig 抓取 kconfig 警告/错误 ==="
+          make defconfig 2>&1 | grep -iE 'recursive|error|warning|depends on|does not exist|unknown symbol|no architecture|skipped' | sed 's/^/  /' | head -60
+          echo
+          echo "=== 包现场：feed 链接 / Makefile 门槛 / packageinfo / .in 块全文 ==="
           PIN=tmp/.packageinfo
           IN=tmp/.config-package.in
-          for lib in $DIAG_LIBS; do
+          DIAG_LIBS="libuv libwebsockets-full libminiupnpc libnatpmp libcurl libnghttp2 wget-ssl libcap libstdcpp libatomic kmod-tun libncurses libreadline terminfo ucode-mod-math libopenssl zlib librt libubox libpcre2"
+          SCAN="$miss $DIAG_LIBS"
+          for lib in $SCAN; do
             if grep -q "^CONFIG_PACKAGE_${lib}=y" .config; then st="y"
             elif grep -q "^# CONFIG_PACKAGE_${lib} is not set" .config; then st="OFF"
-            else st="无符号"; fi
+            else st="NONE"; fi
             echo "--- $lib [$st]"
+            mf=$(find feeds package -mindepth 2 -path "*/${lib}/Makefile" 2>/dev/null | head -1)
+            [ -z "$mf" ] && mf=$(grep -rlE "Package/${lib}\b" feeds/*/*/*/Makefile feeds/*/*/Makefile 2>/dev/null | head -1)
+            if [ -z "$mf" ]; then
+              echo "  Makefile: 未找到"
+            else
+              feed=$(echo "$mf" | sed -E 's#^(feeds|package)/([^/]+)/.*#\2#')
+              echo "  feed: $feed  Makefile: $mf"
+              grep -nE 'DEPENDS:=|PKG_ARCHDEP|BROKEN|@\(.*\)|ARCHDEP|define Package' "$mf" | sed 's/^/  /'
+            fi
             if [ -f "$PIN" ]; then
-              awk -v P="Package: $lib" '$0==P{f=1;next} /^Package: /{f=0} f&&/^(Depends|Menu-Depends|Provides|Version):/{print "    "$0}' "$PIN"
+              awk -v P="Package: $lib" '$0==P{f=1;next} /^Package: /{f=0} f&&/^(Version|Depends|Menu-Depends|Conflicts|Provides|Arch|Build-Variant|Repository|Section):/{print "    "$0}' "$PIN"
             fi
             if ln=$(grep -nE "^[[:space:]]*config PACKAGE_${lib}\$" "$IN" | head -1 | cut -d: -f1); then
-              echo "    .in: 已注册块 (行 $ln)"
-              sed -n "${ln},$((ln+14))p" "$IN" | grep -E 'depends on' | sed 's/^/    块内depends: /'
-              awk -v n="$ln" '
-                /^\tif /{stack[++d]=$0}
-                /^\tendif/{d--}
-                NR==n{for(i=1;i<=d;i++) printf "    包裹if[%d]: %s\n", i, stack[i]}
-              ' "$IN"
+              echo "  .in 块(行 $ln):"
+              end=$((ln+14))
+              sed -n "${ln},${end}p" "$IN" | sed 's/^/    /'
             else
-              echo "    .in: 无 config 块（未注册进 Kconfig）"
+              echo "  .in: 无 config 块"
             fi
           done
           echo "::error::defconfig 未选中以下预期包:$miss"
