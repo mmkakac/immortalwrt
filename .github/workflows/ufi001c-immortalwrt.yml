@@ -197,6 +197,20 @@ jobs:
               sed -n "${start},${end}p" "$kf" | sed 's/^/    /'
             fi
           done
+          echo
+          echo "=== 底层库现场诊断（CI .config 状态 + 包索引门槛）==="
+          echo "全局: ARCH=$(grep -E '^CONFIG_ARCH=' .config) SUBTARGET=$(grep -E '^CONFIG_TARGET_SUBTARGET=' .config) LIBC=$(grep -E '^CONFIG_LIBC=' .config) KERNEL=$(grep -oE '^CONFIG_LINUX_6_[0-9]+' .config | head -1)"
+          DIAG_LIBS="libuv libwebsockets-full libminiupnpc libnatpmp libcurl libnghttp2 wget-ssl libcap libstdcpp libatomic kmod-tun libncurses libreadline terminfo ucode-mod-math libopenssl zlib librt libubox libpcre2"
+          PIN=tmp/.packageinfo
+          for lib in $DIAG_LIBS; do
+            if grep -q "^CONFIG_PACKAGE_${lib}=y" .config; then st="y"
+            elif grep -q "^# CONFIG_PACKAGE_${lib} is not set" .config; then st="OFF"
+            else st="无符号"; fi
+            echo "--- $lib [$st]"
+            if [ -f "$PIN" ]; then
+              awk -v P="Package: $lib" '$0==P{f=1;next} /^Package: /{f=0} f&&/^(Depends|Menu-Depends|Provides|Version):/{print "    "$0}' "$PIN"
+            fi
+          done
           echo "::error::defconfig 未选中以下预期包:$miss"
           exit 1
         fi
