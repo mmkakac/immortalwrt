@@ -157,6 +157,40 @@ jobs:
         grep -q '^CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi001c"' .config || { echo "::error::机型未选中"; exit 1; }
         echo "关键依赖:"; grep -E '^CONFIG_PACKAGE_(libffi|glib2|modemmanager|openstick)' .config
 
+    - name: 校验预期应用（defconfig 后快速失败）
+      run: |
+        cd openwrt
+        EXPECT="ttyd luci-app-ttyd luci-theme-argon zerotier luci-app-zerotier cloudflared luci-app-cloudflared luci-app-fileassistant curl wget-ssl bash jq"
+        miss=""
+        for pkg in $EXPECT; do
+          if grep -q "^CONFIG_PACKAGE_${pkg}=y" .config; then
+            echo "[OK]   $pkg"
+          else
+            echo "[缺]   $pkg"
+            miss="$miss $pkg"
+          fi
+        done
+        if [ -n "$miss" ]; then
+          echo
+          echo "=== 缺失包依赖排查（Makefile DEPENDS + 未选中依赖）==="
+          for pkg in $miss; do
+            mf=$(find feeds package -mindepth 2 -path "*/${pkg}/Makefile" 2>/dev/null | head -1)
+            echo "--- $pkg ---"
+            if [ -z "$mf" ]; then
+              echo "  未在 feeds/ 或 package/ 找到 Makefile（包名不符 / feed 未接入）"
+              continue
+            fi
+            echo "  $mf"
+            grep -E 'DEPENDS' "$mf" | sed 's/^/  /'
+            for d in $(grep -hoE '\+[A-Za-z0-9._-]+(:[A-Za-z0-9._-]+)?' "$mf" | tr -d '+' | sed 's/^[^:]*://' | sort -u); do
+              grep -q "^CONFIG_PACKAGE_${d}=y" .config || echo "    依赖未选中: $d"
+            done
+          done
+          echo "::error::defconfig 未选中以下预期包:$miss"
+          exit 1
+        fi
+        echo "全部预期应用已被 defconfig 选中"
+
     - name: Download
       run: |
         cd openwrt
