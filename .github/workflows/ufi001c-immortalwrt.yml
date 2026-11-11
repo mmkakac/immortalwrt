@@ -160,56 +160,63 @@ jobs:
     - name: 校验预期应用（defconfig 后快速失败）
       run: |
         cd openwrt
+        V="${{ steps.variant.outputs.variant }}"
+        SEED="../$KIT_DIR/config.$V"
         EXPECT="ttyd luci-app-ttyd luci-theme-argon zerotier luci-app-zerotier cloudflared luci-app-cloudflared luci-app-fileassistant curl wget-ssl bash jq"
-        miss=""
-        for pkg in $EXPECT; do
-          if grep -q "^CONFIG_PACKAGE_${pkg}=y" .config; then
-            echo "[OK]   $pkg"
+        PIN=tmp/.packageinfo
+        IN=tmp/.config-package.in
+        repo_of(){ awk -v P="Package: $1" '$0==P{f=1;next} /^Package: /{f=0} f&&/^Repository: /{print $2}' "$PIN"; }
+        dep_of(){ awk -v P="Package: $1" '$0==P{f=1;next} /^Package: /{f=0} f&&/^Depends: /{sub(/^Depends: /,"");print}' "$PIN"; }
+        arch_of(){ awk -v P="Package: $1" '$0==P{f=1;next} /^Package: /{f=0} f&&/^Arch: /{print $2}' "$PIN"; }
+
+        echo "=== base HEAD / feed 提交 / 全局 ==="
+        echo "base HEAD: $(git log -1 --format='%h %ci %s')"
+        for f in openstick packages luci routing telephony video smpackage store; do [ -d "feeds/$f/.git" ] && echo "  $f: $(git -C feeds/$f log -1 --format='%h %ci')"; done
+        grep -E '^CONFIG_(ARCH|TARGET_BOARD|TARGET_SUBTARGET|TARGET_PROFILE|TARGET_ARCH_PACKAGES|LIBC|USE_MUSL|LINUX_6)' .config
+
+        echo
+        echo "=== kconfig 完整输出（前 120 行，不过滤）==="
+        make defconfig 2>&1 | tee /tmp/defcfg2.log | head -120
+        echo "--- recursive/error/unknown/does not exist/broken 专项 ---"
+        grep -iE 'recursive|cyclic|error|unknown symbol|does not exist|no architecture|broken' /tmp/defcfg2.log | head -40
+
+        echo
+        echo "=== 种子全部 =y 包 defconfig 后状态（状态 / Repository / 包 / 依赖）==="
+        : > /tmp/state.txt
+        for pkg in $(grep -E '^CONFIG_PACKAGE_[^=]+=y' "$SEED" | sed -E 's/^CONFIG_PACKAGE_//; s/=y$//'); do
+          if grep -q "^CONFIG_PACKAGE_${pkg}=y" .config; then st=y
+          elif grep -q "^# CONFIG_PACKAGE_${pkg} is not set" .config; then st=OFF
+          else st=NONE; fi
+          echo "$st|$(repo_of "$pkg")|$pkg|$(dep_of "$pkg")" >> /tmp/state.txt
+        done
+        echo "--- 状态 x Repository 统计 ---"
+        awk -F'|' '{c[$1"|"$2]++} END{for(k in c) print k"  "c[k]}' /tmp/state.txt | sort
+        echo "--- 非 y 清单 ---"
+        awk -F'|' '$1!="y"{print $1" ["$2"] "$3" :: "$4}' /tmp/state.txt | sort
+
+        echo
+        echo "=== 重点包：链接 / Arch / Depends / .in 块 ==="
+        BASELINE="libexpat libattr libconfig coreutils cgi-io libqmi libmbim glib2 libdbus libudev-zero luci-base"
+        for pkg in $EXPECT libuv libwebsockets-full libminiupnpc libnatpmp libnghttp2 libcurl $BASELINE; do
+          if grep -q "^CONFIG_PACKAGE_${pkg}=y" .config; then st=y
+          elif grep -q "^# CONFIG_PACKAGE_${pkg} is not set" .config; then st=OFF
+          else st=NONE; fi
+          echo "--- $pkg [$st] repo=$(repo_of "$pkg") arch=$(arch_of "$pkg")"
+          echo "    Depends: $(dep_of "$pkg")"
+          link=$(find package/feeds -maxdepth 3 -name "$pkg" -type l 2>/dev/null | head -1)
+          echo "    link: ${link:-<package/feeds 无链接>}"
+          ln=$(grep -nE "^[[:space:]]*config PACKAGE_${pkg}\$" "$IN" | head -1 | cut -d: -f1)
+          if [ -n "$ln" ]; then
+            echo "    .in 块(行 $ln):"
+            sed -n "${ln},$((ln+12))p" "$IN" | sed 's/^/      /'
           else
-            echo "[缺]   $pkg"
-            miss="$miss $pkg"
+            echo "    .in: 无 config 块"
           fi
         done
+
+        miss=""
+        for pkg in $EXPECT; do grep -q "^CONFIG_PACKAGE_${pkg}=y" .config || miss="$miss $pkg"; done
         if [ -n "$miss" ]; then
-          echo
-          echo "=== base HEAD / feed 提交 / 全局 ==="
-          echo "base HEAD: $(git log -1 --format='%h %ci %s')"
-          echo "feed 提交:"; for f in openstick packages luci routing telephony video smpackage store; do [ -d "feeds/$f/.git" ] && echo "  $f: $(git -C feeds/$f log -1 --format='%h %ci')"; done
-          echo "全局: ARCH=$(grep -E '^CONFIG_ARCH=' .config) SUBTARGET=$(grep -E '^CONFIG_TARGET_SUBTARGET=' .config) LIBC=$(grep -E '^CONFIG_LIBC=' .config) KERNEL=$(grep -oE '^CONFIG_LINUX_6_[0-9]+' .config | head -1)"
-          echo
-          echo "=== 重新 defconfig 抓取 kconfig 警告/错误 ==="
-          make defconfig 2>&1 | grep -iE 'recursive|error|warning|depends on|does not exist|unknown symbol|no architecture|skipped' | sed 's/^/  /' | head -60
-          echo
-          echo "=== 包现场：feed 链接 / Makefile 门槛 / packageinfo / .in 块全文 ==="
-          PIN=tmp/.packageinfo
-          IN=tmp/.config-package.in
-          DIAG_LIBS="libuv libwebsockets-full libminiupnpc libnatpmp libcurl libnghttp2 wget-ssl libcap libstdcpp libatomic kmod-tun libncurses libreadline terminfo ucode-mod-math libopenssl zlib librt libubox libpcre2"
-          SCAN="$miss $DIAG_LIBS"
-          for lib in $SCAN; do
-            if grep -q "^CONFIG_PACKAGE_${lib}=y" .config; then st="y"
-            elif grep -q "^# CONFIG_PACKAGE_${lib} is not set" .config; then st="OFF"
-            else st="NONE"; fi
-            echo "--- $lib [$st]"
-            mf=$(find feeds package -mindepth 2 -path "*/${lib}/Makefile" 2>/dev/null | head -1)
-            [ -z "$mf" ] && mf=$(grep -rlE "Package/${lib}\b" feeds/*/*/*/Makefile feeds/*/*/Makefile 2>/dev/null | head -1)
-            if [ -z "$mf" ]; then
-              echo "  Makefile: 未找到"
-            else
-              feed=$(echo "$mf" | sed -E 's#^(feeds|package)/([^/]+)/.*#\2#')
-              echo "  feed: $feed  Makefile: $mf"
-              grep -nE 'DEPENDS:=|PKG_ARCHDEP|BROKEN|@\(.*\)|ARCHDEP|define Package' "$mf" | sed 's/^/  /'
-            fi
-            if [ -f "$PIN" ]; then
-              awk -v P="Package: $lib" '$0==P{f=1;next} /^Package: /{f=0} f&&/^(Version|Depends|Menu-Depends|Conflicts|Provides|Arch|Build-Variant|Repository|Section):/{print "    "$0}' "$PIN"
-            fi
-            if ln=$(grep -nE "^[[:space:]]*config PACKAGE_${lib}\$" "$IN" | head -1 | cut -d: -f1); then
-              echo "  .in 块(行 $ln):"
-              end=$((ln+14))
-              sed -n "${ln},${end}p" "$IN" | sed 's/^/    /'
-            else
-              echo "  .in: 无 config 块"
-            fi
-          done
           echo "::error::defconfig 未选中以下预期包:$miss"
           exit 1
         fi
