@@ -98,6 +98,27 @@ CONFIG_PACKAGE_luci-app-fileassistant=y
 CONFIG_PACKAGE_libffi=y
 CONFIG_PACKAGE_libpcre2=y
 
+# ---- 底层依赖钉选（这些库自身默认关闭，仅靠上层 select 易在 defconfig 时被连带摘除，显式钉选）----
+# ttyd 依赖
+CONFIG_PACKAGE_libcap=y
+CONFIG_PACKAGE_libuv=y
+CONFIG_PACKAGE_libwebsockets-full=y
+# bash 依赖
+CONFIG_PACKAGE_libncurses=y
+CONFIG_PACKAGE_libreadline=y
+CONFIG_PACKAGE_terminfo=y
+# curl 依赖
+CONFIG_PACKAGE_libcurl=y
+CONFIG_PACKAGE_libnghttp2=y
+# zerotier 依赖
+CONFIG_PACKAGE_libstdcpp=y
+CONFIG_PACKAGE_kmod-tun=y
+CONFIG_PACKAGE_libminiupnpc=y
+CONFIG_PACKAGE_libnatpmp=y
+CONFIG_PACKAGE_libatomic=y
+# argon 主题依赖
+CONFIG_PACKAGE_ucode-mod-math=y
+
 # ---- 关闭短信转发 ----
 # CONFIG_PACKAGE_smstools3 is not set
 # CONFIG_PACKAGE_sms-tool is not set
