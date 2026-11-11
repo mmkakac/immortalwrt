@@ -198,10 +198,13 @@ jobs:
             fi
           done
           echo
-          echo "=== 底层库现场诊断（CI .config 状态 + 包索引门槛）==="
+          echo "=== 底层库现场诊断（CI .config 状态 + 包索引门槛 + .in 注册）==="
+          echo "base HEAD: $(git log -1 --format='%h %ci %s')"
+          echo "feed 提交:"; for f in openstick packages luci routing telephony video smpackage store; do [ -d "feeds/$f/.git" ] && echo "  $f: $(git -C feeds/$f log -1 --format='%h %ci')"; done
           echo "全局: ARCH=$(grep -E '^CONFIG_ARCH=' .config) SUBTARGET=$(grep -E '^CONFIG_TARGET_SUBTARGET=' .config) LIBC=$(grep -E '^CONFIG_LIBC=' .config) KERNEL=$(grep -oE '^CONFIG_LINUX_6_[0-9]+' .config | head -1)"
           DIAG_LIBS="libuv libwebsockets-full libminiupnpc libnatpmp libcurl libnghttp2 wget-ssl libcap libstdcpp libatomic kmod-tun libncurses libreadline terminfo ucode-mod-math libopenssl zlib librt libubox libpcre2"
           PIN=tmp/.packageinfo
+          IN=tmp/.config-package.in
           for lib in $DIAG_LIBS; do
             if grep -q "^CONFIG_PACKAGE_${lib}=y" .config; then st="y"
             elif grep -q "^# CONFIG_PACKAGE_${lib} is not set" .config; then st="OFF"
@@ -209,6 +212,17 @@ jobs:
             echo "--- $lib [$st]"
             if [ -f "$PIN" ]; then
               awk -v P="Package: $lib" '$0==P{f=1;next} /^Package: /{f=0} f&&/^(Depends|Menu-Depends|Provides|Version):/{print "    "$0}' "$PIN"
+            fi
+            if ln=$(grep -nE "^[[:space:]]*config PACKAGE_${lib}\$" "$IN" | head -1 | cut -d: -f1); then
+              echo "    .in: 已注册块 (行 $ln)"
+              sed -n "${ln},$((ln+14))p" "$IN" | grep -E 'depends on' | sed 's/^/    块内depends: /'
+              awk -v n="$ln" '
+                /^\tif /{stack[++d]=$0}
+                /^\tendif/{d--}
+                NR==n{for(i=1;i<=d;i++) printf "    包裹if[%d]: %s\n", i, stack[i]}
+              ' "$IN"
+            else
+              echo "    .in: 无 config 块（未注册进 Kconfig）"
             fi
           done
           echo "::error::defconfig 未选中以下预期包:$miss"
