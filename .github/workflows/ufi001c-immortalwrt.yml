@@ -161,15 +161,34 @@ jobs:
       run: |
         cd openwrt
         V="${{ steps.variant.outputs.variant }}"
-        SEED="../$KIT_DIR/config.$V"
+        SEED="$GITHUB_WORKSPACE/$KIT_DIR/config.$V"
         EXPECT="ttyd luci-app-ttyd luci-theme-argon zerotier luci-app-zerotier cloudflared luci-app-cloudflared luci-app-fileassistant curl wget-ssl bash jq"
         PIN=tmp/.packageinfo
         IN=tmp/.config-package.in
         repo_of(){ awk -v P="Package: $1" '$0==P{f=1;next} /^Package: /{f=0} f&&/^Repository: /{print $2}' "$PIN"; }
         dep_of(){ awk -v P="Package: $1" '$0==P{f=1;next} /^Package: /{f=0} f&&/^Depends: /{sub(/^Depends: /,"");print}' "$PIN"; }
         arch_of(){ awk -v P="Package: $1" '$0==P{f=1;next} /^Package: /{f=0} f&&/^Arch: /{print $2}' "$PIN"; }
+        st_of(){ if grep -q "^CONFIG_PACKAGE_$1=y" .config; then echo y; elif grep -q "^# CONFIG_PACKAGE_$1 is not set" .config; then echo OFF; else echo NONE; fi; }
+        raw_of(){ grep -nE "^(# )?CONFIG_PACKAGE_$1(=y|=m| is not set)" .config | head -2 | sed 's/^/      raw: /'; }
+        outer_stack(){
+          awk -v T="config PACKAGE_$1" '
+          /^[[:space:]]*if[[:space:]]/ { s[++t]=$0; next }
+          /^[[:space:]]*menu[[:space:]]/ { s[++t]=$0; next }
+          /^[[:space:]]*choice/ { s[++t]=$0; next }
+          /^[[:space:]]*endif/ { t--; next }
+          /^[[:space:]]*endmenu/ { t--; next }
+          /^[[:space:]]*endchoice/ { t--; next }
+          $0 ~ T { for(i=1;i<=t;i++) print "      外层: "s[i]; exit }' "$IN"
+        }
+        rev_select(){
+          grep -nE "select PACKAGE_$1([[:space:]]|$)" "$IN" | while read -r l; do
+            ln=${l%%:*}; ow=$(awk -v L="$ln" 'NR<=L && /^[[:space:]]*config /{c=$0} END{print c}' "$IN")
+            echo "      被 $ow select @$ln"
+          done | head -6
+        }
 
         echo "=== base HEAD / feed 提交 / 全局 ==="
+        echo "SEED=$SEED 存在=$([ -f "$SEED" ] && echo yes || echo NO)"
         echo "base HEAD: $(git log -1 --format='%h %ci %s')"
         for f in openstick packages luci routing telephony video smpackage store; do [ -d "feeds/$f/.git" ] && echo "  $f: $(git -C feeds/$f log -1 --format='%h %ci')"; done
         grep -E '^CONFIG_(ARCH|TARGET_BOARD|TARGET_SUBTARGET|TARGET_PROFILE|TARGET_ARCH_PACKAGES|LIBC|USE_MUSL|LINUX_6)' .config
@@ -183,26 +202,28 @@ jobs:
         echo
         echo "=== 种子全部 =y 包 defconfig 后状态（状态 / Repository / 包 / 依赖）==="
         : > /tmp/state.txt
+        if [ -f "$SEED" ]; then
         for pkg in $(grep -E '^CONFIG_PACKAGE_[^=]+=y' "$SEED" | sed -E 's/^CONFIG_PACKAGE_//; s/=y$//'); do
-          if grep -q "^CONFIG_PACKAGE_${pkg}=y" .config; then st=y
-          elif grep -q "^# CONFIG_PACKAGE_${pkg} is not set" .config; then st=OFF
-          else st=NONE; fi
-          echo "$st|$(repo_of "$pkg")|$pkg|$(dep_of "$pkg")" >> /tmp/state.txt
+          echo "$(st_of "$pkg")|$(repo_of "$pkg")|$pkg|$(dep_of "$pkg")" >> /tmp/state.txt
         done
+        else
+          echo "!! 种子文件读不到: $SEED"
+        fi
         echo "--- 状态 x Repository 统计 ---"
         awk -F'|' '{c[$1"|"$2]++} END{for(k in c) print k"  "c[k]}' /tmp/state.txt | sort
         echo "--- 非 y 清单 ---"
         awk -F'|' '$1!="y"{print $1" ["$2"] "$3" :: "$4}' /tmp/state.txt | sort
 
         echo
-        echo "=== 重点包：链接 / Arch / Depends / .in 块 ==="
+        echo "=== 重点包：原始行 / 外层栈 / 反向 select / Depends / .in 块 ==="
         BASELINE="libexpat libattr libconfig coreutils cgi-io libqmi libmbim glib2 libdbus libudev-zero luci-base"
         for pkg in $EXPECT libuv libwebsockets-full libminiupnpc libnatpmp libnghttp2 libcurl $BASELINE; do
-          if grep -q "^CONFIG_PACKAGE_${pkg}=y" .config; then st=y
-          elif grep -q "^# CONFIG_PACKAGE_${pkg} is not set" .config; then st=OFF
-          else st=NONE; fi
+          st=$(st_of "$pkg")
           echo "--- $pkg [$st] repo=$(repo_of "$pkg") arch=$(arch_of "$pkg")"
           echo "    Depends: $(dep_of "$pkg")"
+          raw_of "$pkg"
+          outer_stack "$pkg"
+          rev_select "$pkg"
           link=$(find package/feeds -maxdepth 3 -name "$pkg" -type l 2>/dev/null | head -1)
           echo "    link: ${link:-<package/feeds 无链接>}"
           ln=$(grep -nE "^[[:space:]]*config PACKAGE_${pkg}\$" "$IN" | head -1 | cut -d: -f1)
