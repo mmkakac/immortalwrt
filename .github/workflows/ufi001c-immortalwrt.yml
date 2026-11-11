@@ -126,6 +126,9 @@ jobs:
         mkdir -p openwrt/package/libs/libffi
         cp "$KIT_DIR/packages/libffi/Makefile" openwrt/package/libs/libffi/Makefile
         [ -d "$KIT_DIR/patches" ] && cp -r "$KIT_DIR/patches" openwrt/patches-ht20 || true
+        # wcn36xx.ko 由 mac80211 backports 包编译，补丁必须打进 backports 的 ath 补丁目录才会作用于实际固件
+        mkdir -p openwrt/package/kernel/mac80211/patches/ath
+        [ -d "$KIT_DIR/patches" ] && cp "$KIT_DIR/patches"/*.patch openwrt/package/kernel/mac80211/patches/ath/ || true
         [ -d "$KIT_DIR/files" ] && cp -r "$KIT_DIR/files" openwrt/files || true
 
     - name: diy1 + feeds
@@ -168,12 +171,19 @@ jobs:
         echo "status=success" >> "$GITHUB_OUTPUT"
         echo "FILE_DATE=_$(date +%Y%m%d%H%M)" >> "$GITHUB_ENV"
 
-    - name: 验证补丁
+    - name: 验证补丁（backports 源码）
       if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         cd openwrt
-        f=$(find build_dir/target-*/linux-msm89xx*/linux-*/drivers/net/wireless/ath/wcn36xx/main.c 2>/dev/null | head -1)
-        grep -q 'NO_HT40MINUS' "$f" && echo "补丁OK" || exit 1
+        f=$(find build_dir -path '*backports-*/drivers/net/wireless/ath/wcn36xx/main.c' 2>/dev/null | head -1)
+        if [ -z "$f" ]; then echo "::error::找不到 backports 里的 wcn36xx main.c"; exit 1; fi
+        echo "检查文件: $f"
+        grep -q 'IEEE80211_CHAN_NO_HT40MINUS | IEEE80211_CHAN_NO_HT40PLUS' "$f" || { echo "::error::2GHz 信道表缺少 NO_HT40 标志"; exit 1; }
+        if awk '/wcn_band_2ghz = \{/,/^\};/' "$f" | grep -q 'IEEE80211_HT_CAP_SUP_WIDTH_20_40'; then
+          echo "::error::2GHz ht_cap 仍带 SUP_WIDTH_20_40，补丁第二处没生效"; exit 1
+        fi
+        awk '/wcn_band_2ghz = \{/,/^\};/' "$f" | grep -q 'ht_supported = true' || { echo "::error::ht_supported 被误删，11n 20MHz 会一起掉"; exit 1; }
+        echo "验证通过：backports wcn36xx 已禁 40MHz，11n 20MHz（MCS0-7）保留"
 
     - name: 整理固件
       id: organize
