@@ -1,0 +1,19 @@
+#!/bin/sh
+# zz-enable-gc-adb —— 对齐官方基线：开机自启 USB gadget(gc) 与 adbd
+#
+# 背景：android-tools-adbd 自带 uci-defaults `adb_disable`，首跑会
+#   /etc/init.d/adbd disable；adbd 真正由 gc 在挂载 USB functionfs 后拉起。
+# 本脚本文件名用 zz- 前缀，保证按字典序排在 adb_disable 之后执行，
+# 重新把 gc / adbd 两个 init 服务 enable，并固定 gc 配置 enabled=1 adb=1。
+#
+# base-files 的 uci_apply_defaults() 仅在脚本返回 0 后删除本文件；
+# 这里 gc/adbd 包首跑即在位，正常返回 0 即可。
+
+[ -x /etc/init.d/gc ] && /etc/init.d/gc enable
+[ -x /etc/init.d/adbd ] && /etc/init.d/adbd enable
+
+uci -q set gc.config.enabled='1'
+uci -q set gc.config.adb='1'
+uci -q commit gc
+
+exit 0
