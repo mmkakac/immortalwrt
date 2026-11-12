@@ -1,14 +1,14 @@
 # =============================================================================
-# UFI001C 精简种子配置（lean）
+# UFI003 精简种子配置（lean）
 # =============================================================================
 
 # ---- 机型 ----
 CONFIG_TARGET_msm89xx=y
 CONFIG_TARGET_msm89xx_msm8916=y
-CONFIG_TARGET_msm89xx_msm8916_DEVICE_openstick-ufi001c=y
+CONFIG_TARGET_msm89xx_msm8916_DEVICE_openstick-ufi003=y
 CONFIG_TARGET_BOARD="msm89xx"
 CONFIG_TARGET_SUBTARGET="msm8916"
-CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi001c"
+CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi003"
 
 # ---- 内核/镜像 ----
 CONFIG_LINUX_6_1=y
