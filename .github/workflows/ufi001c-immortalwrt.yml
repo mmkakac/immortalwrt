@@ -17,7 +17,7 @@ on:
         type: boolean
         default: false
       ssh:
-        description: 'SSH调试'
+        description: '现场诊断（采集 Arch/链接/DUMP 进日志）'
         required: false
         type: boolean
         default: false
@@ -157,21 +157,10 @@ jobs:
         grep -q '^CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi001c"' .config || { echo "::error::机型未选中"; exit 1; }
         echo "关键依赖:"; grep -E '^CONFIG_PACKAGE_(libffi|glib2|modemmanager|openstick)' .config
 
-    - name: 调试现场快览（仅 ssh=true）
+    - name: 现场诊断采集（仅 ssh=true，输出进日志）
       if: inputs.ssh
       run: |
-        cd openwrt
-        echo "=== 现场目录: $PWD ==="
-        grep -E '^CONFIG_(ARCH|ARCH_64BIT|TARGET_ARCH_PACKAGES|USE_MUSL|LIBC|TARGET_PROFILE)' .config
-        echo "--- 目标包当前 .config 状态 ---"
-        grep -E 'PACKAGE_(ttyd|luci-app-ttyd|luci-theme-argon|zerotier|cloudflared|fileassistant|curl|wget-ssl|bash|jq|libuv|libwebsockets-full|libnghttp2|libminiupnpc|libnatpmp)' .config || true
-
-    - name: tmate 断点（仅 ssh=true，挂起等待连接）
-      if: inputs.ssh
-      uses: mxschmitt/action-tmate@v3
-      timeout-minutes: 20
-      with:
-        limit-access-to-actor: false
+        bash ufi001c/debug-inspect.sh 2>&1 | tee /tmp/inspect.log
 
     - name: 校验预期应用（defconfig 后快速失败）
       run: |
