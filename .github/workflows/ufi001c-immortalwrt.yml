@@ -119,7 +119,9 @@ jobs:
 
     - name: 放入配置与补丁
       run: |
-        cp "$KIT_DIR/config.${{ steps.variant.outputs.variant }}" openwrt/.config
+        # 种子 .config 延迟到 feeds install -a 之后再放入：
+        # feeds update -a 末尾会自动 refresh_config 跑一次 defconfig；若此时 .config 已含 feed 包 =y 行，
+        # 而 package/feeds 链接尚未 install，符号不在 .in，种子行会被当不存在符号清掉且不再补回。
         cp "$KIT_DIR/diy-part1.sh" "$KIT_DIR/diy-part2.sh" openwrt/
         chmod +x openwrt/diy-part1.sh openwrt/diy-part2.sh
         # 补回 fork 缺失的 base libffi 包（glib2/modemmanager 依赖）
@@ -142,12 +144,14 @@ jobs:
           rm -rf feeds/smpackage/{base-files,dnsmasq,firewall*,fullconenat,libnftnl,nftables,ppp,opkg,ucl,upx,vsftpd*,miniupnpd-iptables,wireless-regdb}
         fi
         ./scripts/feeds install -a
-        ./diy-part2.sh
 
     - name: defconfig + 强制补依赖 + 校验
       id: check
       run: |
         cd openwrt
+        # install 链接就位后再放入种子 .config，并跑 diy2 追加短信转发/openstick-tweaks
+        cp "$KIT_DIR/config.${{ steps.variant.outputs.variant }}" .config
+        ./diy-part2.sh
         make defconfig
         for pkg in libffi libpcre2; do
           grep -q "^CONFIG_PACKAGE_${pkg}=y" .config || echo "CONFIG_PACKAGE_${pkg}=y" >> .config
