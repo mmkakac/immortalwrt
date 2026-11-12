@@ -158,7 +158,7 @@ jobs:
         done
         make defconfig
         grep -E '^CONFIG_TARGET_PROFILE=|^CONFIG_LINUX' .config
-        grep -q '^CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi001c"' .config || { echo "::error::机型未选中"; exit 1; }
+        grep -q '^CONFIG_TARGET_PROFILE="DEVICE_openstick-ufi003"' .config || { echo "::error::机型未选中"; exit 1; }
         echo "关键依赖:"; grep -E '^CONFIG_PACKAGE_(libffi|glib2|modemmanager|openstick)' .config
 
     - name: 现场诊断采集（仅 ssh=true，输出进日志）
