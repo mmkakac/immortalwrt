@@ -93,8 +93,6 @@ CONFIG_PACKAGE_luci-app-zerotier=y
 # Cloudflared 隧道（后台 cloudflared + LuCI；简中随 LUCI_LANG_zh_Hans 自动安装）
 CONFIG_PACKAGE_cloudflared=y
 CONFIG_PACKAGE_luci-app-cloudflared=y
-# 文件助手（第三方 feed: kenzok8/small-package，自带中文）
-CONFIG_PACKAGE_luci-app-fileassistant=y
 
 # ---- glib2 依赖（libffi 由套件补回源码树 package/libs/libffi）----
 CONFIG_PACKAGE_libffi=y
