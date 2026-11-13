@@ -171,7 +171,7 @@ jobs:
         cd openwrt
         V="${{ steps.variant.outputs.variant }}"
         SEED="$GITHUB_WORKSPACE/$KIT_DIR/config.$V"
-        EXPECT="ttyd luci-app-ttyd luci-theme-argon zerotier luci-app-zerotier cloudflared luci-app-cloudflared filebrowser luci-app-filebrowser-go luci-app-advanced curl wget-ssl bash jq"
+        EXPECT="ttyd luci-app-ttyd luci-theme-argon zerotier luci-app-zerotier cloudflared luci-app-cloudflared luci-app-advanced curl wget-ssl bash jq"
         PIN=tmp/.packageinfo
         IN=tmp/.config-package.in
         repo_of(){ awk -v P="Package: $1" '$0==P{f=1;next} /^Package: /{f=0} f&&/^Repository: /{print $2}' "$PIN"; }
