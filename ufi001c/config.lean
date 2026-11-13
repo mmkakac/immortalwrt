@@ -93,10 +93,7 @@ CONFIG_PACKAGE_luci-app-zerotier=y
 # Cloudflared 隧道（后台 cloudflared + LuCI；简中随 LUCI_LANG_zh_Hans 自动安装）
 CONFIG_PACKAGE_cloudflared=y
 CONFIG_PACKAGE_luci-app-cloudflared=y
-# FileBrowser（Go 后端 + LuCI go 版 + 中文；对齐 lkiuyu stock，替代 fileassistant）
-CONFIG_PACKAGE_filebrowser=y
-CONFIG_PACKAGE_luci-app-filebrowser-go=y
-CONFIG_PACKAGE_luci-i18n-filebrowser-go-zh-cn=y
+# 文件管理：luci-app-advanced 内部捆绑的 fileassistant 面板（/admin/system/fileassistant，走 LuCI 80 口，无独立端口）
 CONFIG_PACKAGE_luci-app-advanced=y
 
 # ---- glib2 依赖（libffi 由套件补回源码树 package/libs/libffi）----
